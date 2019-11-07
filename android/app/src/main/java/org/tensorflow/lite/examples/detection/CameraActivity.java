@@ -19,7 +19,10 @@ package org.tensorflow.lite.examples.detection;
 import android.Manifest;
 import android.app.Fragment;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.PixelFormat;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -39,16 +42,27 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
+
+import android.util.Log;
 import android.util.Size;
+import android.view.LayoutInflater;
 import android.view.Surface;
+import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import net.majorkernelpanic.streaming.SessionBuilder;
+import net.majorkernelpanic.streaming.gl.SurfaceView;
+import net.majorkernelpanic.streaming.rtsp.RtspServer;
+import net.majorkernelpanic.streaming.video.VideoQuality;
+
 import java.nio.ByteBuffer;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
@@ -190,9 +204,14 @@ public abstract class CameraActivity extends AppCompatActivity
     return yuvBytes[0];
   }
 
+  long now = System.nanoTime()/1000, oldnow = now, i=0;
+  ByteBuffer[] inputBuffers = mMediaCodec.getInputBuffers();
+  
+  public static Camera mCamera;
   /** Callback for android.hardware.Camera API */
   @Override
   public void onPreviewFrame(final byte[] bytes, final Camera camera) {
+    mCamera = camera;
     if (isProcessingFrame) {
       LOGGER.w("Dropping frame!");
       return;
@@ -246,6 +265,57 @@ public abstract class CameraActivity extends AppCompatActivity
         startHandler();
       }
     }
+
+    // -------------from videostream.java-----------------------
+    //Log.i(TAG, "Hi this probably runs once for vedio and once for audio");
+				/*ByteBuffer bufferdata =  ByteBuffer.allocate(data.length);
+				bufferdata.put(data);*/
+    oldnow = now;
+    now = System.nanoTime()/1000;
+    if (i++>3) {
+      i = 0;
+      //Log.d(TAG,"Measured: "+1000000L/(now-oldnow)+" fps.");
+    }
+    try {
+      int bufferIndex = mMediaCodec.dequeueInputBuffer(500000);
+
+      if (bufferIndex>=0) {
+        inputBuffers[bufferIndex].clear();
+        if (bytes == null) Log.e(TAG,"Symptom of the \"Callback buffer was to small\" problem...");
+        else convertor.convert(bytes, inputBuffers[bufferIndex]);
+        Log.i(TAG, "Buffer to be queued is: " + inputBuffers[bufferIndex].array().toString());
+        mMediaCodec.queueInputBuffer(bufferIndex, 0, inputBuffers[bufferIndex].position(), now, 0);
+//						MediaCodec.BufferInfo videoInfo = new MediaCodec.BufferInfo();
+//						videoInfo.presentationTimeUs = startTime-oldnow; // setting timestamp in file
+//						videoInfo.size = inputBuffers[bufferIndex].capacity();
+//						mMuxer.writeSampleData(videoTrack,inputBuffers[bufferIndex],videoInfo);
+
+						/*InputStream newStream = new ByteArrayInputStream(data);
+						byte[] buffer = new byte[data.length];
+						int count;
+						try {
+							while ((count = newStream.read(buffer)) != -1) {
+								outputStream.write(buffer, 0, data.length);
+							}
+						}catch(Exception e){
+							e.printStackTrace();
+						}*/
+        //after addtrack, start
+
+      } else {
+        Log.e(TAG,"No buffer available !");
+//						mMuxer.stop();
+//						mMuxer.release();
+						/*try {
+							outputStream.close();
+						}catch(Exception e){
+							e.printStackTrace();
+						}*/
+      }
+    } finally {
+      mCamera.addCallbackBuffer(bytes);
+    }
+
   }
 
   /** Callback for Camera2 API */
@@ -331,6 +401,15 @@ public abstract class CameraActivity extends AppCompatActivity
   public synchronized void onStart() {
     LOGGER.d("onStart " + this);
     super.onStart();
+
+    // Starts the RTSP server
+    mSharedPreference  = getSharedPreferences("robotConfigFile", MODE_PRIVATE);
+    mSharedPreference.getString(RtspServer.KEY_PORT, "1234"); // configure port
+    // start and configure the stream server
+    Toast.makeText(this, "Stream Server Started!", Toast.LENGTH_SHORT).show();
+    createFakeView();
+    configureSession(sv, 640, 480, 25, 600000);
+    this.startService(new Intent(getApplicationContext(),RtspServer.class));
   }
 
   @Override
@@ -363,6 +442,8 @@ public abstract class CameraActivity extends AppCompatActivity
   public synchronized void onStop() {
     LOGGER.d("onStop " + this);
     super.onStop();
+    CameraActivity.this.stopService(new Intent(getApplicationContext(), RtspServer.class));
+
   }
 
   @Override
@@ -599,4 +680,40 @@ public abstract class CameraActivity extends AppCompatActivity
   public void startHandler() {
     timeOutHandler.postDelayed(r, 5 * 1000);
   }
+
+  //--------------------RTSP Setup --------------------------------------------------------
+  private SharedPreferences mSharedPreference;
+  private net.majorkernelpanic.streaming.gl.SurfaceView sv;
+
+
+  public void configureSession(SurfaceView surfaceview, int x, int y, int fr, int vbr){
+    //this.stopService(new Intent(getApplicationContext(), RtspServer.class));
+
+    // Configures the SessionBuilder
+    SessionBuilder.getInstance()
+            .setSurfaceView(surfaceview)
+            .setPreviewOrientation(0)
+            .setContext(getApplicationContext())
+            .setVideoQuality(new VideoQuality(x,y,fr,vbr))
+            .setAudioEncoder(SessionBuilder.AUDIO_AAC)
+            .setVideoEncoder(SessionBuilder.VIDEO_H264);
+  }
+
+  public void createFakeView(){
+    WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+    LayoutInflater inflater =(LayoutInflater)getSystemService(LAYOUT_INFLATER_SERVICE);
+    RelativeLayout layout=(RelativeLayout) inflater.inflate(R.layout.fake_preview,null);
+    WindowManager.LayoutParams params = new WindowManager.LayoutParams(1, 1,
+            WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY,
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT);
+
+    wm.addView(layout, params);
+
+    sv =  layout.findViewById(R.id.surfaceView_fake);
+    SurfaceHolder sh = sv.getHolder();
+    sv.setZOrderOnTop(true);
+    sh.setFormat(PixelFormat.TRANSPARENT);
+  }
+
 }
