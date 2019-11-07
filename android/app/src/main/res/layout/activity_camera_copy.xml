@@ -31,12 +31,11 @@
         <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
             xmlns:tools="http://schemas.android.com/tools"
             android:id="@+id/container"
+            android:background="#FFFFFF"
             android:layout_width="640px"
             android:layout_height="480px"
-            android:layout_alignParentLeft="true"
             android:layout_marginLeft="60dp"
-            android:layout_marginTop="80dp"
-            android:background="#FFFFFF"
+            android:layout_marginTop="40dp"
             tools:context="org.tensorflow.demo.CameraActivity" />
 
         <ImageView
@@ -44,33 +43,41 @@
             android:background="#FFFFFF"
             android:layout_width="640px"
             android:layout_height="480px"
-            android:layout_alignParentRight="true"
-            android:layout_marginRight="60dp"
-            android:layout_marginTop="80dp"
+            android:layout_alignParentLeft="true"
+            android:layout_marginLeft="60dp"
+            android:layout_marginTop="10dp"
             android:scaleType="fitXY"
-           />
+            android:layout_below="@+id/container"/>
+
+
 
         <TextView
             android:id="@+id/text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:layout_marginLeft="60dp"
-
-            android:layout_marginRight="60dp"
-            android:text="Press the SOS button to inform the campus security for any emergency case."
+            android:layout_toRightOf="@+id/container"
             android:textColor="#FFFFFF"
-            android:textSize="22sp" />
+            android:layout_marginTop="20dp"
+            android:layout_marginLeft="80dp"
+            android:layout_marginRight="40dp"
+            android:textSize="26sp"
+            android:text="Press the SOS button to inform the campus security for any emergency case."/>
 
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_margin="10dp"
+            android:background="@drawable/camera_warning"/>
         <ImageView
             android:id="@+id/emergencyButton"
             android:layout_width="600px"
+
             android:layout_height="600px"
             android:layout_below="@+id/text"
-            android:layout_marginLeft="-52dp"
-            android:layout_marginTop="139dp"
+            android:layout_marginLeft="129dp"
+            android:layout_marginTop="35dp"
             android:layout_toRightOf="@+id/container"
-            android:background="@drawable/emergency_button" />
+            android:background="@drawable/sos_button" />
         <!--<androidx.appcompat.widget.Toolbar-->
             <!--android:id="@+id/toolbar"-->
             <!--android:layout_width="match_parent"-->

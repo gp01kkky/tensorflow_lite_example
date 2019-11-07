@@ -31,6 +31,9 @@ import android.util.Size;
 import android.util.TypedValue;
 import android.widget.Toast;
 import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
@@ -212,8 +215,20 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
               }
             }
 
-            tracker.trackResults(mappedRecognitions, currTimestamp);
-            trackingOverlay.postInvalidate();
+            if (CameraActivity.faceDetected == true)
+            {
+              DateFormat dateFormat = new SimpleDateFormat("dd_MMM_yyyy_hh_mm_ss_a");
+              Date date = new Date();
+              BitmapHandler bitmapHandler = new BitmapHandler(cropCopyBitmap, dateFormat.format(date) + ".jpg", 1L );
+              try {
+                bitmapHandler.save();
+                bitmapHandler.uploadFile("192.168.21.57","robotmanager", 2222,"robotmanager","sdcard/" + bitmapHandler.getFilename(),"upload/image");
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
+            }
+            //tracker.trackResults(mappedRecognitions, currTimestamp);
+            //trackingOverlay.postInvalidate();
 
             computingDetection = false;
 
