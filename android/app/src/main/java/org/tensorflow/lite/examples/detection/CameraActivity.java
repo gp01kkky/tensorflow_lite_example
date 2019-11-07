@@ -19,7 +19,10 @@ package org.tensorflow.lite.examples.detection;
 import android.Manifest;
 import android.app.Fragment;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.PixelFormat;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -39,22 +42,37 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
+
+import android.util.Log;
 import android.util.Size;
+import android.view.LayoutInflater;
 import android.view.Surface;
+import android.view.SurfaceHolder;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import net.majorkernelpanic.streaming.SessionBuilder;
+import net.majorkernelpanic.streaming.gl.SurfaceView;
+import net.majorkernelpanic.streaming.rtsp.RtspServer;
+import net.majorkernelpanic.streaming.video.VideoQuality;
+
 import java.nio.ByteBuffer;
+
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
 public abstract class CameraActivity extends AppCompatActivity
-    implements OnImageAvailableListener,
+        implements OnImageAvailableListener,
         Camera.PreviewCallback,
         CompoundButton.OnCheckedChangeListener,
         View.OnClickListener {
@@ -91,6 +109,8 @@ public abstract class CameraActivity extends AppCompatActivity
   public boolean runnable = false;
   protected ImageView screenshot; // screenshot view
 
+  public static Camera mCamera;
+
 
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
@@ -102,6 +122,8 @@ public abstract class CameraActivity extends AppCompatActivity
 //    Toolbar toolbar = findViewById(R.id.toolbar);
 //    setSupportActionBar(toolbar);
 //    getSupportActionBar().setDisplayShowTitleEnabled(false);
+
+    startMqtt();
 
     if (hasPermission()) {
       setFragment();
@@ -121,50 +143,50 @@ public abstract class CameraActivity extends AppCompatActivity
 
     ViewTreeObserver vto = gestureLayout.getViewTreeObserver();
     vto.addOnGlobalLayoutListener(
-        new ViewTreeObserver.OnGlobalLayoutListener() {
-          @Override
-          public void onGlobalLayout() {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
-              gestureLayout.getViewTreeObserver().removeGlobalOnLayoutListener(this);
-            } else {
-              gestureLayout.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-            }
-            //                int width = bottomSheetLayout.getMeasuredWidth();
-            int height = gestureLayout.getMeasuredHeight();
+            new ViewTreeObserver.OnGlobalLayoutListener() {
+              @Override
+              public void onGlobalLayout() {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN) {
+                  gestureLayout.getViewTreeObserver().removeGlobalOnLayoutListener(this);
+                } else {
+                  gestureLayout.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                }
+                //                int width = bottomSheetLayout.getMeasuredWidth();
+                int height = gestureLayout.getMeasuredHeight();
 
-            sheetBehavior.setPeekHeight(height);
-          }
-        });
+                sheetBehavior.setPeekHeight(height);
+              }
+            });
     sheetBehavior.setHideable(false);
 
     sheetBehavior.setBottomSheetCallback(
-        new BottomSheetBehavior.BottomSheetCallback() {
-          @Override
-          public void onStateChanged(@NonNull View bottomSheet, int newState) {
-            switch (newState) {
-              case BottomSheetBehavior.STATE_HIDDEN:
-                break;
-              case BottomSheetBehavior.STATE_EXPANDED:
-                {
-                  bottomSheetArrowImageView.setImageResource(R.drawable.icn_chevron_down);
+            new BottomSheetBehavior.BottomSheetCallback() {
+              @Override
+              public void onStateChanged(@NonNull View bottomSheet, int newState) {
+                switch (newState) {
+                  case BottomSheetBehavior.STATE_HIDDEN:
+                    break;
+                  case BottomSheetBehavior.STATE_EXPANDED:
+                  {
+                    bottomSheetArrowImageView.setImageResource(R.drawable.icn_chevron_down);
+                  }
+                  break;
+                  case BottomSheetBehavior.STATE_COLLAPSED:
+                  {
+                    bottomSheetArrowImageView.setImageResource(R.drawable.icn_chevron_up);
+                  }
+                  break;
+                  case BottomSheetBehavior.STATE_DRAGGING:
+                    break;
+                  case BottomSheetBehavior.STATE_SETTLING:
+                    bottomSheetArrowImageView.setImageResource(R.drawable.icn_chevron_up);
+                    break;
                 }
-                break;
-              case BottomSheetBehavior.STATE_COLLAPSED:
-                {
-                  bottomSheetArrowImageView.setImageResource(R.drawable.icn_chevron_up);
-                }
-                break;
-              case BottomSheetBehavior.STATE_DRAGGING:
-                break;
-              case BottomSheetBehavior.STATE_SETTLING:
-                bottomSheetArrowImageView.setImageResource(R.drawable.icn_chevron_up);
-                break;
-            }
-          }
+              }
 
-          @Override
-          public void onSlide(@NonNull View bottomSheet, float slideOffset) {}
-        });
+              @Override
+              public void onSlide(@NonNull View bottomSheet, float slideOffset) {}
+            });
 
     frameValueTextView = findViewById(R.id.frame_info);
     cropValueTextView = findViewById(R.id.crop_info);
@@ -175,6 +197,9 @@ public abstract class CameraActivity extends AppCompatActivity
     plusImageView.setOnClickListener(this);
     minusImageView.setOnClickListener(this);
     timeOut();
+
+    createFakeView();
+
   }
 
   protected int[] getRgbBytes() {
@@ -193,6 +218,7 @@ public abstract class CameraActivity extends AppCompatActivity
   /** Callback for android.hardware.Camera API */
   @Override
   public void onPreviewFrame(final byte[] bytes, final Camera camera) {
+    mCamera = camera;
     if (isProcessingFrame) {
       LOGGER.w("Dropping frame!");
       return;
@@ -217,21 +243,21 @@ public abstract class CameraActivity extends AppCompatActivity
     yRowStride = previewWidth;
 
     imageConverter =
-        new Runnable() {
-          @Override
-          public void run() {
-            ImageUtils.convertYUV420SPToARGB8888(bytes, previewWidth, previewHeight, rgbBytes);
-          }
-        };
+            new Runnable() {
+              @Override
+              public void run() {
+                ImageUtils.convertYUV420SPToARGB8888(bytes, previewWidth, previewHeight, rgbBytes);
+              }
+            };
 
     postInferenceCallback =
-        new Runnable() {
-          @Override
-          public void run() {
-            camera.addCallbackBuffer(bytes);
-            isProcessingFrame = false;
-          }
-        };
+            new Runnable() {
+              @Override
+              public void run() {
+                camera.addCallbackBuffer(bytes);
+                isProcessingFrame = false;
+              }
+            };
     // processImage();
     if(faceDetected==false)
     {
@@ -278,30 +304,30 @@ public abstract class CameraActivity extends AppCompatActivity
       final int uvPixelStride = planes[1].getPixelStride();
 
       imageConverter =
-          new Runnable() {
-            @Override
-            public void run() {
-              ImageUtils.convertYUV420ToARGB8888(
-                  yuvBytes[0],
-                  yuvBytes[1],
-                  yuvBytes[2],
-                  previewWidth,
-                  previewHeight,
-                  yRowStride,
-                  uvRowStride,
-                  uvPixelStride,
-                  rgbBytes);
-            }
-          };
+              new Runnable() {
+                @Override
+                public void run() {
+                  ImageUtils.convertYUV420ToARGB8888(
+                          yuvBytes[0],
+                          yuvBytes[1],
+                          yuvBytes[2],
+                          previewWidth,
+                          previewHeight,
+                          yRowStride,
+                          uvRowStride,
+                          uvPixelStride,
+                          rgbBytes);
+                }
+              };
 
       postInferenceCallback =
-          new Runnable() {
-            @Override
-            public void run() {
-              image.close();
-              isProcessingFrame = false;
-            }
-          };
+              new Runnable() {
+                @Override
+                public void run() {
+                  image.close();
+                  isProcessingFrame = false;
+                }
+              };
 
       //processImage();
 
@@ -327,10 +353,20 @@ public abstract class CameraActivity extends AppCompatActivity
     Trace.endSection();
   }
 
+  private SharedPreferences mSharedPreference;
+
   @Override
   public synchronized void onStart() {
     LOGGER.d("onStart " + this);
     super.onStart();
+
+    mSharedPreference  = getSharedPreferences("robotConfigFile", MODE_PRIVATE);
+    // start and configure the stream server
+    mSharedPreference.getString(RtspServer.KEY_PORT, "1234");
+    configureSession(sv, 640, 480, 25, 600000);
+    Toast.makeText(this, "Stream Server Started!", Toast.LENGTH_SHORT).show();
+    // Starts the RTSP server
+    this.startService(new Intent(getApplicationContext(),RtspServer.class));
   }
 
   @Override
@@ -379,11 +415,11 @@ public abstract class CameraActivity extends AppCompatActivity
 
   @Override
   public void onRequestPermissionsResult(
-      final int requestCode, final String[] permissions, final int[] grantResults) {
+          final int requestCode, final String[] permissions, final int[] grantResults) {
     if (requestCode == PERMISSIONS_REQUEST) {
       if (grantResults.length > 0
-          && grantResults[0] == PackageManager.PERMISSION_GRANTED
-          && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+              && grantResults[0] == PackageManager.PERMISSION_GRANTED
+              && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
         setFragment();
       } else {
         requestPermission();
@@ -406,7 +442,7 @@ public abstract class CameraActivity extends AppCompatActivity
                 CameraActivity.this,
                 "Camera permission is required for this demo",
                 Toast.LENGTH_LONG)
-            .show();
+                .show();
       }
       requestPermissions(new String[] {PERMISSION_CAMERA}, PERMISSIONS_REQUEST);
     }
@@ -414,7 +450,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
   // Returns true if the device supports the required hardware level, or better.
   private boolean isHardwareLevelSupported(
-      CameraCharacteristics characteristics, int requiredLevel) {
+          CameraCharacteristics characteristics, int requiredLevel) {
     int deviceLevel = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
     if (deviceLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) {
       return requiredLevel == deviceLevel;
@@ -436,7 +472,7 @@ public abstract class CameraActivity extends AppCompatActivity
         }
 
         final StreamConfigurationMap map =
-            characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
         if (map == null) {
           continue;
@@ -446,9 +482,9 @@ public abstract class CameraActivity extends AppCompatActivity
         // This should help with legacy situations where using the camera2 API causes
         // distorted or otherwise broken previews.
         useCamera2API =
-            (facing == CameraCharacteristics.LENS_FACING_EXTERNAL)
-                || isHardwareLevelSupported(
-                    characteristics, CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL);
+                (facing == CameraCharacteristics.LENS_FACING_EXTERNAL)
+                        || isHardwareLevelSupported(
+                        characteristics, CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL);
         LOGGER.i("Camera API lv2?: %s", useCamera2API);
         return cameraId;
       }
@@ -465,24 +501,24 @@ public abstract class CameraActivity extends AppCompatActivity
     Fragment fragment;
     if (useCamera2API) {
       CameraConnectionFragment camera2Fragment =
-          CameraConnectionFragment.newInstance(
-              new CameraConnectionFragment.ConnectionCallback() {
-                @Override
-                public void onPreviewSizeChosen(final Size size, final int rotation) {
-                  previewHeight = size.getHeight();
-                  previewWidth = size.getWidth();
-                  CameraActivity.this.onPreviewSizeChosen(size, rotation);
-                }
-              },
-              this,
-              getLayoutId(),
-              getDesiredPreviewFrameSize());
+              CameraConnectionFragment.newInstance(
+                      new CameraConnectionFragment.ConnectionCallback() {
+                        @Override
+                        public void onPreviewSizeChosen(final Size size, final int rotation) {
+                          previewHeight = size.getHeight();
+                          previewWidth = size.getWidth();
+                          CameraActivity.this.onPreviewSizeChosen(size, rotation);
+                        }
+                      },
+                      this,
+                      getLayoutId(),
+                      getDesiredPreviewFrameSize());
 
       camera2Fragment.setCamera(cameraId);
       fragment = camera2Fragment;
     } else {
       fragment =
-          new LegacyCameraConnectionFragment(this, getLayoutId(), getDesiredPreviewFrameSize());
+              new LegacyCameraConnectionFragment(this, getLayoutId(), getDesiredPreviewFrameSize());
     }
 
     getFragmentManager().beginTransaction().replace(R.id.container, fragment).commit();
@@ -598,5 +634,68 @@ public abstract class CameraActivity extends AppCompatActivity
   }
   public void startHandler() {
     timeOutHandler.postDelayed(r, 5 * 1000);
+  }
+
+  // ----------------------------- rtsp stream -------------------------------------------
+  private SurfaceView sv; // supposedly fake surfaceview
+
+  public void createFakeView(){
+    WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+    LayoutInflater inflater =(LayoutInflater)getSystemService(LAYOUT_INFLATER_SERVICE);
+    RelativeLayout layout=(RelativeLayout) inflater.inflate(R.layout.fake_preview,null);
+    WindowManager.LayoutParams params = new WindowManager.LayoutParams(1, 1,
+            WindowManager.LayoutParams.TYPE_SYSTEM_OVERLAY,
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT);
+
+    wm.addView(layout, params);
+
+    sv = (SurfaceView) layout.findViewById(R.id.surfaceView_fake);
+    SurfaceHolder sh = sv.getHolder();
+    sv.setZOrderOnTop(true);
+    sh.setFormat(PixelFormat.TRANSPARENT);
+  }
+
+  public void configureSession(SurfaceView surfaceview, int x, int y, int fr, int vbr){
+    //this.stopService(new Intent(getApplicationContext(), RtspServer.class));
+
+    // Configures the SessionBuilder
+    SessionBuilder.getInstance()
+            .setSurfaceView(surfaceview)
+            .setPreviewOrientation(0)
+            .setContext(getApplicationContext())
+            .setVideoQuality(new VideoQuality(x,y,fr,vbr))
+            .setAudioEncoder(SessionBuilder.AUDIO_AAC)
+            .setVideoEncoder(SessionBuilder.VIDEO_H264);
+
+  }
+
+  // -------------------- For MQTT -----------------------------
+  private static final String TAG = "DetectorActivity";
+  public MqttHelper mqttHelper;
+
+  private void startMqtt() {
+    mqttHelper = new MqttHelper(getApplicationContext());
+    mqttHelper.setCallback(new MqttCallbackExtended() {
+      @Override
+      public void connectComplete(boolean reconnect, String serverURI) {
+        Log.w(TAG, serverURI);
+      }
+
+      @Override
+      public void connectionLost(Throwable cause) {
+
+      }
+
+      @Override
+      public void messageArrived(String topic, MqttMessage message) throws Exception {
+        Log.w(TAG, message.toString());
+      }
+
+      @Override
+      public void deliveryComplete(IMqttDeliveryToken token) {
+
+      }
+    });
   }
 }

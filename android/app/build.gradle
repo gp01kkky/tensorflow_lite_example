@@ -46,5 +46,10 @@ dependencies {
     implementation 'com.google.android.material:material:1.0.0'
     implementation 'org.tensorflow:tensorflow-lite:0.0.0-nightly'
     implementation group: 'com.jcraft', name: 'jsch', version: '0.1.54'
+    // for rtsp
+    implementation 'com.hierynomus:sshj:0.27.0'
 
+    //For MQTT
+    implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.1.1'
+    implementation 'org.eclipse.paho:org.eclipse.paho.android.service:1.1.1'
 }

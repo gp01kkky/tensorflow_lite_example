@@ -27,6 +27,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.Size;
 import android.util.TypedValue;
 import android.widget.Toast;
@@ -36,6 +37,10 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
+import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
 import org.tensorflow.lite.examples.detection.customview.OverlayView.DrawCallback;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
@@ -84,6 +89,9 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private MultiBoxTracker tracker;
 
   private BorderedText borderedText;
+
+
+
 
   @Override
   public void onPreviewSizeChosen(final Size size, final int rotation) {
@@ -223,6 +231,11 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
               try {
                 bitmapHandler.save();
                 bitmapHandler.uploadFile("192.168.21.57","robotmanager", 2222,"robotmanager","sdcard/" + bitmapHandler.getFilename(),"upload/image");
+
+                if(mqttHelper.isMqttConnected()) {
+                  mqttHelper.publishRbNotification("Human Detected", bitmapHandler.getFilename(), "5c899c07-7b0a-4f1c-810e-f4bb419e1547");
+                }
+
               } catch (IOException e) {
                 e.printStackTrace();
               }
@@ -237,6 +250,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                   @Override
                   public void run() {
                     screenshot.setImageBitmap(cropCopyBitmap);
+
                     showFrameInfo(previewWidth + "x" + previewHeight);
                     showCropInfo(cropCopyBitmap.getWidth() + "x" + cropCopyBitmap.getHeight());
                     showInference(lastProcessingTimeMs + "ms");
@@ -271,4 +285,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   protected void setNumThreads(final int numThreads) {
     runInBackground(() -> detector.setNumThreads(numThreads));
   }
+
+
 }
