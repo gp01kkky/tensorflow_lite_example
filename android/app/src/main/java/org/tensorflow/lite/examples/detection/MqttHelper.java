@@ -3,7 +3,6 @@ package org.tensorflow.lite.examples.detection;
 import android.content.Context;
 import android.util.Log;
 
-
 import org.eclipse.paho.android.service.MqttAndroidClient;
 import org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
@@ -14,9 +13,7 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -39,8 +36,8 @@ public class MqttHelper {
 //    private static final String serverUri = "tcp://192.168.21.241";              // NCS: KY's Laptop
 //    private static final String serverUri = "tcp://192.168.21.36:1883";               // Robot's Adaptor
 //    private static final String serverUri = "tcp://postman.cloudmqtt.com:11516";   // CloudMQTT
-    private static final String username = "USERNAME";
-    private static final String password = "PWD";
+    private static final String username = "ymikzszg";
+    private static final String password = "NI6tT_zFV1DF";
 
     private MqttAndroidClient client;
     private String clientId = MqttClient.generateClientId();
@@ -48,7 +45,7 @@ public class MqttHelper {
     private String publishRobotStatusTopic = "RbStatus";
     private String publishTaskStatusTopic = "RbTaskStatus";
     private String publishTaskRequestTopic = "RbTaskRequest";
-    public String subscribeTaskTopic = "RtTask";
+    public String subscribeRobotNotificationTopic = "NotificationResp"; //"RtTask";
     public String subscribeTaskRequestStatusTopic = "RbTaskRequestStatus";
     public String subscribeFaqTopic = "test/message";
     public String subscribeConciergeProfileTopic = "test/main";
@@ -196,13 +193,14 @@ public class MqttHelper {
             obj.put("type","picture");
             obj.put("description","Human Detected");
             obj.put("severity", "critical");
-            obj.put("status","closed");
+            obj.put("status","opened");
             obj.put("mapVerID", mapVerID);
             obj.put("positionX", "300");
             obj.put("positionY", "400");
             obj.put("heading", "20");
             obj.put("details", "");
-            obj.put("imagePath", imagePath);
+            String s = "/sftp/NCS/";
+            obj.put("imagePath", s +imagePath);
             obj.put("videoPath", "");
             MqttMessage message = new MqttMessage();
             message.setPayload(obj.toString().getBytes(StandardCharsets.UTF_8));
@@ -224,7 +222,7 @@ public class MqttHelper {
             client.subscribe(subscribeFaqTopic,0);
             client.subscribe(subscribeConciergeProfileTopic,0);
             client.subscribe(subscribeTaskRequestStatusTopic,0);
-            client.subscribe(subscribeTaskTopic, 0, null, new IMqttActionListener() {
+            client.subscribe(subscribeRobotNotificationTopic, 0, null, new IMqttActionListener() {
                 @Override
                 public void onSuccess(IMqttToken asyncActionToken) {
                     Log.w("Mqtt","Subscribed!");

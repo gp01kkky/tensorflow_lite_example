@@ -41,6 +41,7 @@ import java.util.List;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.json.JSONObject;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
 import org.tensorflow.lite.examples.detection.customview.OverlayView.DrawCallback;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
@@ -225,13 +226,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
             if (CameraActivity.faceDetected == true)
             {
-              DateFormat dateFormat = new SimpleDateFormat("dd_MMM_yyyy_hh_mm_ss_a");
+              DateFormat dateFormat = new SimpleDateFormat("yyyymmdd_hhmmss");
               Date date = new Date();
               BitmapHandler bitmapHandler = new BitmapHandler(cropCopyBitmap, dateFormat.format(date) + ".jpg", 1L );
+              Log.i("FileFormat", dateFormat.format(date) + ".jpg");
               try {
                 bitmapHandler.save();
-                bitmapHandler.uploadFile("192.168.21.57","robotmanager", 2222,"robotmanager","sdcard/" + bitmapHandler.getFilename(),"upload/image");
-
+                bitmapHandler.uploadFile("192.168.21.236","robotmanager", 9300,"robotmanager","sdcard/" + bitmapHandler.getFilename(),"/home/godzilla/mount/web/html/sftp/NCS");
+//                bitmapHandler.uploadFile("192.168.21.194","sftpuser", 22,"q1w2e3r4","sdcard/" + bitmapHandler.getFilename(),"/data/sftpuser/upload");
                 if(mqttHelper.isMqttConnected()) {
                   mqttHelper.publishRbNotification("Human Detected", bitmapHandler.getFilename(), "5c899c07-7b0a-4f1c-810e-f4bb419e1547");
                 }
@@ -256,8 +258,25 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                     showInference(lastProcessingTimeMs + "ms");
                   }
                 });
+
+            // ----------------received notification------------------
+            if (receivedNotification == true){
+              JSONObject jsonObject;
+              try {
+                jsonObject = new JSONObject(payload.toString());
+                String toastMessage = jsonObject.getString("status").equals("acknowledged")? "Notification Acknowledged!":payload;
+                Log.i("DectectorActivity", toastMessage);
+                Toast.makeText(DetectorActivity.this, toastMessage, Toast.LENGTH_LONG).show();
+              }catch (Exception e){
+                e.printStackTrace();
+              }
+              //Toast.makeText(DetectorActivity.this, payload, Toast.LENGTH_LONG).show();
+              receivedNotification = false;
+            }
           }
+
         });
+
   }
 
   @Override

@@ -41,7 +41,6 @@ import androidx.annotation.NonNull;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
-import androidx.appcompat.widget.Toolbar;
 
 import android.util.Log;
 import android.util.Size;
@@ -68,6 +67,8 @@ import java.nio.ByteBuffer;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
@@ -673,6 +674,8 @@ public abstract class CameraActivity extends AppCompatActivity
   // -------------------- For MQTT -----------------------------
   private static final String TAG = "DetectorActivity";
   public MqttHelper mqttHelper;
+  public boolean receivedNotification = false;
+  public String payload;
 
   private void startMqtt() {
     mqttHelper = new MqttHelper(getApplicationContext());
@@ -689,7 +692,17 @@ public abstract class CameraActivity extends AppCompatActivity
 
       @Override
       public void messageArrived(String topic, MqttMessage message) throws Exception {
-        Log.w(TAG, message.toString());
+        //Log.w(TAG, message.toString());
+        //-----------------Robot Acknowledge-----------------------------------
+        if (topic.equals(mqttHelper.subscribeRobotNotificationTopic)) {
+          //System.out.println("MQTT " + message);
+          payload = message.toString();
+          //JSONObject jsonObject= new JSONObject(message.toString());
+          //Log.i("CameraActivity", jsonObject.getString("status"));
+          //if (jsonObject.getString("status").equals("acknowledged"))
+          receivedNotification = true;
+          //else System.out.println("Not acknowledged!");
+        }
       }
 
       @Override
